@@ -1,0 +1,47 @@
+# Local development / verification stack. Builds images from source and
+# publishes the app on http://localhost:8086 (8085 is the recipes dev stack,
+# 8080 is TSDProxy's admin port). Production deployment lives in the
+# home-server repo (stacks/todo/compose.yaml) and pulls from GHCR.
+#
+# Distinct project name: the production stack directory is also named "todo",
+# and identical project names would share volumes/networks.
+name: todo-dev
+
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "8086:8080"
+    depends_on:
+      - backend
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://todo:todo@postgres:5432/todo
+      TIMEZONE: America/New_York
+      # Set NTFY_TOPIC here (or export it) to test real phone notifications.
+      NTFY_TOPIC: ${NTFY_TOPIC:-}
+      NTFY_URL: ${NTFY_URL:-https://ntfy.sh}
+      NOTIFY_UNTIL_HOUR: ${NOTIFY_UNTIL_HOUR:-21}
+      REMINDER_CHECK_SECONDS: ${REMINDER_CHECK_SECONDS:-300}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: todo
+      POSTGRES_DB: todo
+      POSTGRES_PASSWORD: todo
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U todo -d todo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
